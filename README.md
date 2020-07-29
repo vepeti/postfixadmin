@@ -18,6 +18,6 @@ Example: postfixadmin -A forward <from email> <to email>
     
 -A, --add  [email/domain/forwarding]       Add element to system  
 -D, --del  [email/domain/forwarding]       Delete existing element  
--L, --list [email/domains/forwardings]     List elements  
+-L, --list [emails/domains/forwardings]     List elements  
 -P, --passwd                               Change user password  
 -h, --help                                 Print this help  
