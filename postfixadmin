@@ -1,0 +1,271 @@
+#!/usr/bin/python3
+
+import sys
+from os import path
+import MySQLdb
+import re
+import argparse
+import getpass
+import configparser
+import crypt
+import hashlib
+from passlib.hash import md5_crypt
+from passlib.hash import sha1_crypt
+from passlib.hash import sha256_crypt
+from passlib.hash import sha512_crypt
+
+class pfadmin:
+
+    def help(self):
+        print("""
+Usage: postfixadmin [OPTIONS]
+Example: postfixadmin -A email <email>
+Example: postfixadmin -D domain <domain>
+Example: postfixadmin -A forward <from email> <to email>
+
+-A, --add  [user/domain/forwarding]        Add element to system
+-D, --del  [user/domain/forwarding]        Delete existing element
+-L, --list [users/domains/forwardings]     List elements
+-P, --passwd                            Change user password
+-h, --help                              Print this help
+""");
+
+    def confirm(self,confirmtext):
+        answer = ""
+        while answer not in ["y", "n"]:
+            answer = input(confirmtext).lower()
+        return answer == "y"
+
+    def __init__(self, host, user, password, dbname):
+        try:
+            self.db=MySQLdb.connect(host, user, password, dbname)
+            self.dbcursor=self.db.cursor()
+            self.dbcursor1=self.db.cursor(MySQLdb.cursors.DictCursor)
+        except MySQLdb.OperationalError:
+            print("Can not connect to Mysql server!")
+            exit(1)
+
+    def add(self,datatype,value,value2=''):
+        if datatype=='email':
+            if re.match("^[\w.]{2,}@\w{2,}\.[a-z]{2,4}$", value):
+                user,domain=value.rstrip().split("@")
+                self.dbcursor.execute("SELECT domain FROM domains WHERE domain='"+domain+"'")
+                if self.dbcursor.rowcount:
+                    password=getpass.getpass(prompt='Give the new user\'s password!')
+                    password2=getpass.getpass(prompt='Give the new user\'s password again!\n')
+
+                    if password==password2:
+                        try:
+                            if password_hash.lower()=="md5":
+                                password=hashlib.md5(password.encode('utf-8')).hexdigest()
+                            elif password_hash.lower()=="sha1":
+                                password=hashlib.sha1(password.encode('utf-8')).hexdigest()
+                            elif password_hash.lower()=="sha256":
+                                password=hashlib.sha256(password.encode('utf-8')).hexdigest()
+                            elif password_hash.lower()=="sha512":
+                                password=hashlib.sha512(password.encode('utf-8')).hexdigest()
+                            elif self.password_hash.lower()=="md5-crypt":
+                                password=md5_crypt.encrypt(password)
+                            elif self.password_hash.lower()=="sha1-crypt":
+                                password=sha1_crypt.encrypt(password)
+                            elif self.password_hash.lower()=="sha256-crypt":
+                                password=sha256_crypt.encrypt(password)
+                            elif self.password_hash.lower()=="sha512-crypt":
+                                password=sha512_crypt.encrypt(password)
+                            else:
+                                password=crypt.crypt(password, password)
+                            self.dbcursor.execute("INSERT INTO users VALUES('"+value+"', '"+password+"', 104857600)");
+                            self.db.commit()
+                            print("New email created!")
+                        except MySQLdb.IntegrityError:
+                            print("Insert failed! (Maybe already exists)")
+                    else:
+                        print("Password mismatch!")
+                else:
+                    print("Domain doesn't exists!")
+            else:
+                print("Invalid email format!")
+
+        elif datatype=='domain':
+            if re.match("^\w{2,}\.[a-z]{2,4}$", value):
+                domain=value.rstrip()
+                self.dbcursor.execute("SELECT domain FROM domains WHERE domain='"+domain+"'")
+                if not self.dbcursor.rowcount:
+                    try:
+                        self.dbcursor.execute("INSERT INTO domains VALUES('"+domain+"')")
+                        self.db.commit()
+                        print("New domain created!")
+                    except MySQLdb.IntegrityError:
+                        print("Insert failed! (Maybe already exists)")
+                else:
+                    print("Domain already exists!")
+            else:
+                print("Invalid domain format!")
+        elif datatype=='forwarding':
+            if re.match("^[\w.]{2,}@\w{2,}\.[a-z]{2,4}$", value) and re.match("^[\w.]{2,}@\w{2,}\.[a-z]{2,4}$", value2):
+                from_email=value
+                to_email=value2.rstrip()
+                self.dbcursor.execute("SELECT source FROM forwardings WHERE source='"+value+"'")
+                if not self.dbcursor.rowcount:
+                    try:
+                        self.dbcursor.execute("INSERT INTO forwardings VALUES('"+value+"', '"+value2+"')")
+                        self.db.commit()
+                        print("New forwarding created!")
+                    except MySQLdb.IntegrityError:
+                        print("Insert failed! (Maybe already exists)")
+                else:
+                    print("Forwarding already exists!")
+            else:
+                print("Invalid email format!")
+        else:
+            print("Wrong datatype given!")
+
+    def list(self,datatype):
+        if datatype=='domains':
+            self.dbcursor.execute("SELECT domain FROM "+datatype)
+            records=self.dbcursor.fetchall()
+            for i in records:
+                print(i[0])
+        elif datatype=='forwardings':
+            self.dbcursor.execute("SELECT * FROM "+datatype)
+            records=self.dbcursor.fetchall()
+            for i in records:
+                print(i[0]+" -> "+str(i[1]))
+        else:
+            self.dbcursor.execute("SELECT email,quota FROM "+datatype)
+            records=self.dbcursor.fetchall()
+            for i in records:
+                print(i[0]+" "+str(i[1]))
+
+    def delete(self,datatype,value):
+        if datatype=='email':
+            if re.match("^[\w.]{2,}@\w{2,}\.[a-z]{2,4}$", value):
+                user,domain=value.rstrip().split("@")
+                self.dbcursor.execute("SELECT email FROM users WHERE email='"+value+"'")
+                if self.dbcursor.rowcount:
+                    if self.confirm("Are you sure to delete "+value+" [y/n]? "):
+                        try:
+                            self.dbcursor.execute("DELETE FROM users WHERE email='"+value+"'");
+                            self.db.commit()
+                            print("The email deleted!")
+                        except MySQLdb.IntegrityError:
+                            print("Delete failed!")
+                    else:
+                        print("User intterrupt!")
+                else:
+                    print("Email "+value+" doesn't exists!")
+            else:
+                print("Invalid email format!")
+        elif datatype=='domain':
+            if re.match("^\w{2,}\.[a-z]{2,4}$", value):
+                domain=value.rstrip()
+                self.dbcursor.execute("SELECT domain FROM domains WHERE domain='"+domain+"'")
+                if self.dbcursor.rowcount:
+                    if self.confirm("Are you sure to delete "+domain+" [y/n]? "):
+                        try:
+                            self.dbcursor.execute("DELETE FROM domains WHERE domain='"+domain+"'")
+                            self.db.commit()
+                            print("The domain deleted!")
+                        except MySQLdb.IntegrityError:
+                            print("Delete failed!")
+                    else:
+                        print("User intterrupt!")
+                else:
+                    print("Domain doesn't exists!")
+            else:
+                print("Invalid domain format!")
+        elif datatype=='forwarding':
+            if re.match("^\w{2,}\.[a-z]{2,4}$", value) and re.match("^\w{2,}\.[a-z]{2,4}$", value2):
+                from_email=value
+                to_email=value2.rstrip()
+                self.dbcursor.execute("SELECT source FROM forwardings WHERE source='"+value+"'")
+                if self.dbcursor.rowcount:
+                    try:
+                        self.dbcursor.execute("DELETE FROM forwardings WHERE source='"+value+"'")
+                        self.db.commit()
+                        print("The forwarding deleted!")
+                    except MySQLdb.IntegrityError:
+                        print("Delete failed!")
+                else:
+                    print("Forwarding doesn't exists!")
+            else:
+                print("Invalid email format!")
+        else:
+            print("Wrong datatype given!")
+
+    def passwd(self,email):
+        if re.match("^[\w.]{2,}@\w{2,}\.[a-z]{2,4}$", email):
+            self.dbcursor.execute("SELECT email FROM users WHERE email='"+email+"'")
+            if self.dbcursor.rowcount:
+                password=getpass.getpass(prompt='Give the new password!')
+                password2=getpass.getpass(prompt='Give the new password again!\n')
+                if password==password2:
+                    try:
+                        if self.password_hash.lower()=="md5":
+                            password=hashlib.md5(password.encode('utf-8')).hexdigest()
+                        elif self.password_hash.lower()=="sha1":
+                            password=hashlib.sha1(password.encode('utf-8')).hexdigest()
+                        elif self.password_hash.lower()=="sha256":
+                            password=hashlib.sha256(password.encode('utf-8')).hexdigest()
+                        elif self.password_hash.lower()=="sha512":
+                            password=hashlib.sha512(password.encode('utf-8')).hexdigest()
+                        elif self.password_hash.lower()=="md5-crypt":
+                            password=md5_crypt.encrypt(password)
+                        elif self.password_hash.lower()=="sha1-crypt":
+                            password=sha1_crypt.encrypt(password)
+                        elif self.password_hash.lower()=="sha256-crypt":
+                            password=sha256_crypt.encrypt(password)
+                        elif self.password_hash.lower()=="sha512-crypt":
+                            password=sha512_crypt.encrypt(password)
+                        else:
+                            password=crypt.crypt(password, password)
+                        self.dbcursor.execute("UPDATE users SET password='"+password+"' WHERE email='"+email+"'");
+                        self.db.commit()
+                        print("Password changed!")
+                    except MySQLdb.IntegrityError:
+                        print("Insert failed! (Maybe already exists)")
+                else:
+                        print("Password mismatch!")
+            else:
+                print("Email doesn't exists!")
+        else:
+            print("Invalid email format!")
+
+
+# MAIN
+parser = argparse.ArgumentParser(add_help=False)
+parser.add_argument('-h', '--help', action='store_true')
+parser.add_argument('-A', '--add', nargs=len(sys.argv)-2 or 3)
+parser.add_argument('-D', '--delete', nargs=2)
+parser.add_argument('-L', '--list', nargs=1, choices=('users', 'domains', 'forwardings'))
+parser.add_argument('-P', '--passwd', nargs=1)
+
+if path.isfile("/etc/postfixadmin/postfixadmin.conf"):
+    config = configparser.ConfigParser()
+    try:
+        config.read('/etc/postfixadmin/postfixadmin.conf')
+    except configparser.ParsingError:
+        print("Parse error in config file!")
+        exit(1)
+else:
+    print("No config file found!")
+    exit(1)
+
+pfa=pfadmin(config.get('database', 'host'), config.get('database', 'user'), config.get('database', 'pass'), config.get('database', 'name'))
+pfa.password_hash=config.get('security', 'password_hash')
+
+args = parser.parse_args()
+
+if args.help or len(sys.argv)<=1:
+    pfa.help()
+elif args.add:
+    if len(args.add)==2:
+        pfa.add(args.add[0], args.add[1])
+    else:
+        pfa.add(args.add[0], args.add[1], args.add[2])
+elif args.list:
+    pfa.list(args.list[0])
+elif args.delete:
+    pfa.delete(args.delete[0], args.delete[1])
+elif args.passwd:
+    pfa.passwd(args.passwd[0])
