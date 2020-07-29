@@ -2,7 +2,16 @@
 
 Small and simple Python based cli tool to manage postfix mysql users and domains
 
-Usage: postfixadmin [OPTIONS]  
+# Requirements
+- python3 (>=3.5)
+- python3-passlib (>=1.7)
+- python3-mysqldb (>=1.3)
+
+# Installation
+Run the postfixadmin.deb file, or copy files manually. Place the config file into /etc/postfixadmin folder
+
+# Usage
+postfixadmin [OPTIONS]  
 Example: postfixadmin -A email <email>  
 Example: postfixadmin -D domain <domain>  
 Example: postfixadmin -A forward <from email> <to email>  
