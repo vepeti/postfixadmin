@@ -22,11 +22,12 @@ Usage: postfixadmin [OPTIONS]
 Example: postfixadmin -A email <email>
 Example: postfixadmin -D domain <domain>
 Example: postfixadmin -A forward <from email> <to email>
+Example: postfixadmin -P <email>
 
 -A, --add  [email/domain/forwarding]        Add element to system
 -D, --del  [email/domain/forwarding]        Delete existing element
 -L, --list [emails/domains/forwardings]     List elements
--P, --passwd                                Change user password
+-P, --passwd <email address>                Change user password
 -h, --help                                  Print this help
 """);
 
@@ -49,20 +50,20 @@ Example: postfixadmin -A forward <from email> <to email>
         if datatype=='email':
             if re.match("^[\w.]{2,}@\w{2,}\.[a-z]{2,4}$", value):
                 user,domain=value.rstrip().split("@")
-                self.dbcursor.execute("SELECT domain FROM "+self.domains_table+" WHERE domain='"+domain+"'")
+                self.dbcursor.execute("SELECT "+self.domain_domain_field+" FROM "+self.domains_table+" WHERE "+self.domain_domain_field+"='"+domain+"'")
                 if self.dbcursor.rowcount:
                     password=getpass.getpass(prompt='Give the new user\'s password!')
                     password2=getpass.getpass(prompt='Give the new user\'s password again!\n')
 
                     if password==password2:
                         try:
-                            if password_hash.lower()=="md5":
+                            if self.password_hash.lower()=="md5":
                                 password=hashlib.md5(password.encode('utf-8')).hexdigest()
-                            elif password_hash.lower()=="sha1":
+                            elif self.password_hash.lower()=="sha1":
                                 password=hashlib.sha1(password.encode('utf-8')).hexdigest()
-                            elif password_hash.lower()=="sha256":
+                            elif self.password_hash.lower()=="sha256":
                                 password=hashlib.sha256(password.encode('utf-8')).hexdigest()
-                            elif password_hash.lower()=="sha512":
+                            elif self.password_hash.lower()=="sha512":
                                 password=hashlib.sha512(password.encode('utf-8')).hexdigest()
                             elif self.password_hash.lower()=="md5-crypt":
                                 password=md5_crypt.encrypt(password)
@@ -74,7 +75,7 @@ Example: postfixadmin -A forward <from email> <to email>
                                 password=sha512_crypt.encrypt(password)
                             else:
                                 password=crypt.crypt(password, password)
-                            self.dbcursor.execute("INSERT INTO "+self.emails_table+" VALUES('"+value+"', '"+password+"', 104857600)");
+                            self.dbcursor.execute("INSERT INTO "+self.emails_table+"("+self.email_email_field+", "+self.email_password_field+", "+self.email_quota_field+") VALUES('"+value+"', '"+password+"', 104857600)");
                             self.db.commit()
                             print("New email created!")
                         except MySQLdb.IntegrityError:
@@ -89,10 +90,10 @@ Example: postfixadmin -A forward <from email> <to email>
         elif datatype=='domain':
             if re.match("^\w{2,}\.[a-z]{2,4}$", value):
                 domain=value.rstrip()
-                self.dbcursor.execute("SELECT domain FROM "+self.domains_table+" WHERE domain='"+domain+"'")
+                self.dbcursor.execute("SELECT "+self.domain_domain_field+" FROM "+self.domains_table+" WHERE "+self.domain_domain_field+"='"+domain+"'")
                 if not self.dbcursor.rowcount:
                     try:
-                        self.dbcursor.execute("INSERT INTO "+self.domains_table+" VALUES('"+domain+"')")
+                        self.dbcursor.execute("INSERT INTO "+self.domains_table+"("+self.domain_domain_field+") VALUES('"+domain+"')")
                         self.db.commit()
                         print("New domain created!")
                     except MySQLdb.IntegrityError:
@@ -105,10 +106,10 @@ Example: postfixadmin -A forward <from email> <to email>
             if re.match("^[\w.]{2,}@\w{2,}\.[a-z]{2,4}$", value) and re.match("^[\w.]{2,}@\w{2,}\.[a-z]{2,4}$", value2):
                 from_email=value
                 to_email=value2.rstrip()
-                self.dbcursor.execute("SELECT source FROM "+self.forwardings_table+" WHERE source='"+value+"'")
+                self.dbcursor.execute("SELECT "+self.forward_from_field+" FROM "+self.forwardings_table+" WHERE "+self.forward_from_field+"='"+value+"'")
                 if not self.dbcursor.rowcount:
                     try:
-                        self.dbcursor.execute("INSERT INTO "+self.forwardings_table+" VALUES('"+value+"', '"+value2+"')")
+                        self.dbcursor.execute("INSERT INTO "+self.forwardings_table+"("+self.forward_from_field+", "+self.forward_to_field+") VALUES('"+value+"', '"+value2+"')")
                         self.db.commit()
                         print("New forwarding created!")
                     except MySQLdb.IntegrityError:
@@ -122,7 +123,7 @@ Example: postfixadmin -A forward <from email> <to email>
 
     def list(self,datatype):
         if datatype=='domains':
-            self.dbcursor.execute("SELECT domain FROM "+self.domains_table)
+            self.dbcursor.execute("SELECT "+self.domain_domain_field+" FROM "+self.domains_table)
             records=self.dbcursor.fetchall()
             for i in records:
                 print(i[0])
@@ -132,7 +133,7 @@ Example: postfixadmin -A forward <from email> <to email>
             for i in records:
                 print(i[0]+" -> "+str(i[1]))
         elif datatype=="emails":
-            self.dbcursor.execute("SELECT email,quota FROM "+self.emails_table)
+            self.dbcursor.execute("SELECT "+self.email_email_field+","+self.email_quota_field+" FROM "+self.emails_table)
             records=self.dbcursor.fetchall()
             for i in records:
                 print(i[0]+" "+str(i[1]))
@@ -141,11 +142,11 @@ Example: postfixadmin -A forward <from email> <to email>
         if datatype=='email':
             if re.match("^[\w.]{2,}@\w{2,}\.[a-z]{2,4}$", value):
                 user,domain=value.rstrip().split("@")
-                self.dbcursor.execute("SELECT email FROM "+self.emails_table+" WHERE email='"+value+"'")
+                self.dbcursor.execute("SELECT "+self.email_email_field+" FROM "+self.emails_table+" WHERE "+self.email_email_field+"='"+value+"'")
                 if self.dbcursor.rowcount:
                     if self.confirm("Are you sure to delete "+value+" [y/n]? "):
                         try:
-                            self.dbcursor.execute("DELETE FROM "+self.emails_table+" WHERE email='"+value+"'");
+                            self.dbcursor.execute("DELETE FROM "+self.emails_table+" WHERE "+self.email_email_field+"='"+value+"'");
                             self.db.commit()
                             print("The email deleted!")
                         except MySQLdb.IntegrityError:
@@ -159,11 +160,11 @@ Example: postfixadmin -A forward <from email> <to email>
         elif datatype=='domain':
             if re.match("^\w{2,}\.[a-z]{2,4}$", value):
                 domain=value.rstrip()
-                self.dbcursor.execute("SELECT domain FROM "+self.domains_table+" WHERE domain='"+domain+"'")
+                self.dbcursor.execute("SELECT "+self.domain_domain_field+" FROM "+self.domains_table+" WHERE "+self.domain_domain_field+"='"+domain+"'")
                 if self.dbcursor.rowcount:
                     if self.confirm("Are you sure to delete "+domain+" [y/n]? "):
                         try:
-                            self.dbcursor.execute("DELETE FROM "+self.domains_table+" WHERE domain='"+domain+"'")
+                            self.dbcursor.execute("DELETE FROM "+self.domains_table+" WHERE "+self.domain_domain_field+"='"+domain+"'")
                             self.db.commit()
                             print("The domain deleted!")
                         except MySQLdb.IntegrityError:
@@ -178,10 +179,10 @@ Example: postfixadmin -A forward <from email> <to email>
             if re.match("^\w{2,}\.[a-z]{2,4}$", value) and re.match("^\w{2,}\.[a-z]{2,4}$", value2):
                 from_email=value
                 to_email=value2.rstrip()
-                self.dbcursor.execute("SELECT source FROM "+self.forwardings_table+" WHERE source='"+value+"'")
+                self.dbcursor.execute("SELECT "+self.forward_from_field+" FROM "+self.forwardings_table+" WHERE "+self.forward_from_field+"='"+value+"'")
                 if self.dbcursor.rowcount:
                     try:
-                        self.dbcursor.execute("DELETE FROM "+self.forwardings_table+" WHERE source='"+value+"'")
+                        self.dbcursor.execute("DELETE FROM "+self.forwardings_table+" WHERE "+self.forward_from_field+"='"+value+"'")
                         self.db.commit()
                         print("The forwarding deleted!")
                     except MySQLdb.IntegrityError:
@@ -195,7 +196,7 @@ Example: postfixadmin -A forward <from email> <to email>
 
     def passwd(self,email):
         if re.match("^[\w.]{2,}@\w{2,}\.[a-z]{2,4}$", email):
-            self.dbcursor.execute("SELECT email FROM "+self.emails_table+" WHERE email='"+email+"'")
+            self.dbcursor.execute("SELECT "+self.email_email_field+" FROM "+self.emails_table+" WHERE "+self.email_email_field+"='"+email+"'")
             if self.dbcursor.rowcount:
                 password=getpass.getpass(prompt='Give the new password!')
                 password2=getpass.getpass(prompt='Give the new password again!\n')
@@ -219,7 +220,7 @@ Example: postfixadmin -A forward <from email> <to email>
                             password=sha512_crypt.encrypt(password)
                         else:
                             password=crypt.crypt(password, password)
-                        self.dbcursor.execute("UPDATE "+self.emails_table+" SET password='"+password+"' WHERE email='"+email+"'");
+                        self.dbcursor.execute("UPDATE "+self.emails_table+" SET "+self.email_password_field+"='"+password+"' WHERE "+self.email_email_field+"='"+email+"'");
                         self.db.commit()
                         print("Password changed!")
                     except MySQLdb.IntegrityError:
@@ -256,6 +257,13 @@ pfa.password_hash=config.get('security', 'password_hash')
 pfa.emails_table=config.get('database', 'emails_table')
 pfa.domains_table=config.get('database', 'domains_table')
 pfa.forwardings_table=config.get('database', 'forwardings_table')
+
+pfa.domain_domain_field=config.get('fields', 'domain_domain')
+pfa.email_email_field=config.get('fields', 'email_email')
+pfa.email_password_field=config.get('fields', 'email_password')
+pfa.email_quota_field=config.get('fields', 'email_quota')
+pfa.forward_from_field=config.get('fields', 'forward_from')
+pfa.forward_to_field=config.get('fields', 'forward_to')
 
 args = parser.parse_args()
 
